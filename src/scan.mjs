@@ -8,13 +8,15 @@
  */
 import { readdirSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { isIgnored } from "./ignore.mjs";
 
 /** List immediate subdirectories of a path (sorted, hidden dirs excluded). */
-export function dirs(root, relPath) {
+export function dirs(root, relPath, ignore = []) {
   const abs = join(root, relPath);
   if (!existsSync(abs)) return [];
   return readdirSync(abs)
     .filter((n) => !n.startsWith(".") && !n.startsWith("_") && statSync(join(abs, n)).isDirectory())
+    .filter((n) => !isIgnored(join(relPath, n), ignore))
     .sort();
 }
 
@@ -24,11 +26,12 @@ export function dirs(root, relPath) {
  * `stripExt` is false — config files (`.json`/`.yaml`) keep their extension
  * since the extension is part of what identifies them.
  */
-export function files(root, relPath, ext = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"], stripExt = true) {
+export function files(root, relPath, ext = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"], stripExt = true, ignore = []) {
   const abs = join(root, relPath);
   if (!existsSync(abs)) return [];
   return readdirSync(abs)
     .filter((n) => ext.some((e) => n.endsWith(e)) && !n.endsWith(".d.ts") && !n.endsWith(".test.ts"))
+    .filter((n) => !isIgnored(join(relPath, n), ignore))
     .map((n) => (stripExt ? n.slice(0, -ext.find((e) => n.endsWith(e)).length) : n))
     .sort();
 }
@@ -112,12 +115,12 @@ const list = (arr) => (arr.length ? "`" + arr.join("`, `") + "`" : "_(none)_");
  * common for codegen packages, CLI wrapper packages, or infra-only packages
  * that have no application source of their own.
  */
-function scanConfigOnlyPackage(root) {
+function scanConfigOnlyPackage(root, ignore) {
   if (existsSync(join(root, "src"))) return []; // only a fallback for src-less packages
   const lines = [];
-  const scripts = files(root, "scripts", [".ts", ".mjs", ".js"]);
+  const scripts = files(root, "scripts", [".ts", ".mjs", ".js"], true, ignore);
   if (scripts.length) lines.push(`- **Scripts** (${scripts.length}): ${list(scripts)}`);
-  const configs = files(root, "config", [".json", ".yaml", ".yml"], false);
+  const configs = files(root, "config", [".json", ".yaml", ".yml"], false, ignore);
   if (configs.length) lines.push(`- **Configs** (${configs.length}): ${list(configs)}`);
   return lines;
 }
@@ -130,12 +133,12 @@ function scanConfigOnlyPackage(root) {
  * `<name>/ routes` label, matching how a human would describe "this repo has
  * N little services, here's what each one exposes."
  */
-function scanSiblingPackages(root) {
-  const siblings = dirs(root, ".").filter((name) => existsSync(join(root, name, "src")));
+function scanSiblingPackages(root, ignore) {
+  const siblings = dirs(root, ".", ignore).filter((name) => existsSync(join(root, name, "src")));
   const lines = [];
   for (const name of siblings) {
-    const routeFiles = files(root, `${name}/src/routes`);
-    const serviceFiles = routeFiles.length ? [] : files(root, `${name}/src/services`);
+    const routeFiles = files(root, `${name}/src/routes`, undefined, true, ignore);
+    const serviceFiles = routeFiles.length ? [] : files(root, `${name}/src/services`, undefined, true, ignore);
     const items = routeFiles.length ? routeFiles : serviceFiles;
     const label = routeFiles.length ? `${name}/ routes` : `${name}/ services`;
     if (items.length) lines.push(`- **${label}** (${items.length}): ${list(items)}`);
@@ -155,10 +158,11 @@ export function scanRepo(root, overrides = null) {
 
   const lines = [];
   const seenLabels = new Set();
+  const ignore = overrides?.ignore ?? [];
 
   for (const { path, label, kind, ext } of conventions) {
     if (seenLabels.has(label)) continue; // first match per label wins
-    const items = kind === "files" ? files(root, path, ext) : dirs(root, path);
+    const items = kind === "files" ? files(root, path, ext, true, ignore) : dirs(root, path, ignore);
     if (items.length) {
       lines.push(`- **${label}** (${items.length}): ${list(items)}`);
       seenLabels.add(label);
@@ -168,10 +172,10 @@ export function scanRepo(root, overrides = null) {
   // Fallbacks only kick in if nothing else matched — a repo with a real
   // src/ at its root should never also get per-folder or config-only noise.
   if (!lines.length && !overrides?.replaceConventions) {
-    lines.push(...scanConfigOnlyPackage(root));
+    lines.push(...scanConfigOnlyPackage(root, ignore));
   }
   if (!lines.length && !overrides?.replaceConventions) {
-    lines.push(...scanSiblingPackages(root));
+    lines.push(...scanSiblingPackages(root, ignore));
   }
 
   if (!lines.length) {

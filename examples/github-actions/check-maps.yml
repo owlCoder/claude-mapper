@@ -1,9 +1,11 @@
-# Fails the PR if any MAP.md is older than the latest commit that touched
-# its repo — i.e. someone changed the folder structure and forgot to
-# regenerate the map. Copy this file to .github/workflows/check-maps.yml.
+# Checks whether the generated MAP.md content matches the current project
+# structure. Copy this file to .github/workflows/check-maps.yml.
 #
-# Single-repo setup: remove --all and --match, `claude-mapper check` alone
-# checks the repo the workflow runs in.
+# Single-repo setup: remove --all; `claude-mapper check` alone checks the
+# repository the workflow runs in.
+# NOTE: `npx claude-mapper` uses the package version published on npm.
+# Before an updated release, test this source checkout locally with:
+# node bin/claude-mapper.mjs check --all
 
 name: Check navigation maps
 
@@ -17,10 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # need full history for `git log -1` per repo
 
-      - name: Check MAP.md staleness
+      - name: Check MAP.md is up to date
         run: npx claude-mapper check --all
         # For a multi-repo workspace where sub-repos are checked out as
         # sibling folders, add: --match "^my-org-"

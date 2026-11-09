@@ -11,8 +11,8 @@ Usage:
   claude-mapper generate --all      Generate MAP.md for every sub-repo in this
                                      workspace + a root ARCHITECTURE.md index
   claude-mapper generate --dry-run  Preview output without writing any file
-  claude-mapper check                Check current repo's MAP.md for staleness
-  claude-mapper check --all          Check every sub-repo's MAP.md for staleness
+  claude-mapper check                Check whether MAP.md matches the current structure
+  claude-mapper check --all          Check whether each sub-repo MAP.md matches its structure
   claude-mapper init                 Scaffold a starter .claude-mapper.json
 
 Options:
@@ -72,7 +72,13 @@ function main() {
   if (command === "check") {
     const { staleCount, results } = checkStaleness(cwd, { multiRepo: !!args.all, match });
     for (const r of results) {
-      console.log(`[stale] ${r.repo}: MAP.md older than latest commit — run \`claude-mapper generate\`.`);
+      const reason = r.reason === "missing"
+        ? "MAP.md is missing"
+        : r.reason === "invalid-markers"
+          ? "MAP.md has missing or invalid AUTO markers"
+          : "MAP.md does not match the current project structure";
+      console.log(`[stale] ${r.repo}: ${reason} — run \`claude-mapper generate\`.`);
+      for (const change of r.changes) console.log(`  ${change}`);
     }
     if (staleCount === 0) {
       console.log("[claude-mapper] all maps up to date.");

@@ -25,9 +25,9 @@ in particular:
    — the agent just trusts it and gets misled.
 
 `claude-mapper` addresses both: the structural parts of `MAP.md` are
-**generated from the actual folder tree** (so they can't drift), and
-`claude-mapper check` tells you exactly when a map is older than the repo's
-latest commit.
+**generated from the actual folder tree** (so they can be regenerated and checked for drift), and
+`claude-mapper check` compares the generated map with the current project
+structure and reports when the map is out of date.
 
 ## What it generates
 
@@ -54,12 +54,12 @@ npm install -g claude-mapper
 # Inside a single repo
 claude-mapper generate         # create/update this repo's MAP.md
 claude-mapper generate --dry-run  # preview the output, write nothing
-claude-mapper check            # exit 1 if MAP.md is older than the latest commit
+claude-mapper check            # exit 1 if MAP.md differs from current generated structure
 claude-mapper init             # scaffold a starter .claude-mapper.json
 
 # At a multi-repo workspace root (folders containing package.json or .git)
 claude-mapper generate --all   # regenerate every sub-repo's MAP.md + ARCHITECTURE.md
-claude-mapper check --all      # flag every sub-repo whose MAP.md is stale
+claude-mapper check --all      # flag every sub-repo whose MAP.md differs from the current structure
 
 # Only include matching sub-repo folder names
 claude-mapper generate --all --match "^my-org-"
@@ -121,7 +121,8 @@ entries), run `claude-mapper init` to scaffold a starter file, or drop a
   "paths": [
     { "path": "src/my-weird-layer", "label": "My weird layer", "kind": "dirs" }
   ],
-  "replaceConventions": false
+  "replaceConventions": false,
+  "ignore": ["src/features/legacy", "src/routes/oldRoute.ts"]
 }
 ```
 
@@ -130,6 +131,29 @@ entries), run `claude-mapper init` to scaffold a starter file, or drop a
 - `replaceConventions: true` uses *only* your `paths`, skipping the built-in
   heuristics entirely — useful for unusual repo layouts where the defaults
   produce noise.
+
+### Excluding entries from the generated map
+
+Use `ignore` in `.claude-mapper.json` to omit **recognized** entries from
+`MAP.md`, without deleting or changing any source files. Rules are project-root
+relative paths with `/` separators (Windows-style `\` separators also work).
+Exact file paths and whole directory trees are supported; glob syntax (`*`,
+`**`) is deliberately **not** supported.
+
+For example, `"src/features/legacy"` omits the `legacy` feature folder, while
+`"src/routes/oldRoute.ts"` omits that route file. The displayed counts are
+updated automatically. Omit `ignore` or set it to `[]` to preserve the previous
+behavior. `claude-mapper init` creates a config with `"ignore": []` by default.
+Invalid ignore entries are skipped with a warning.
+
+### Checking whether a map is current
+
+`claude-mapper check` now compares only the generated `AUTO:START` / `AUTO:END`
+section against the content `generate --dry-run` would produce. It ignores
+manual notes. It reports missing maps, invalid AUTO markers and changes in the
+generated AUTO section, showing removed/added lines when they differ. It does
+not modify `MAP.md`; a nonzero exit status indicates a stale or missing map.
+`check --all` performs the same check for each recognized sub-repo.
 
 ## What it deliberately doesn't do
 

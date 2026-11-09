@@ -11,7 +11,8 @@ const TEMPLATE = `{
   "paths": [
     { "path": "src/my-weird-layer", "label": "My weird layer", "kind": "dirs" }
   ],
-  "replaceConventions": false
+  "replaceConventions": false,
+  "ignore": []
 }
 `;
 
